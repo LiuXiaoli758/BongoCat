@@ -7,7 +7,6 @@ jobs:
   build:
     runs-on: windows-latest
     env:
-      # 关闭tauri签名
       TAURI_SKIP_SIGNING: true
     steps:
       - name: Checkout source code
@@ -21,14 +20,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
         run: pnpm install
@@ -36,8 +32,9 @@ jobs:
       - name: Build Tauri app (skip signing)
         run: pnpm tauri build --no-sign
 
+      # Tauri v2 输出路径
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BongoCat-Windows
-          path: src-tauri/target/release/bundle/
+          path: src-tauri/target/release/
