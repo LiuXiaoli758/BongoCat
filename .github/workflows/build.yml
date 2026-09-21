@@ -1,38 +1,41 @@
 name: BongoCat Build Only
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch: # 网页手动点击运行
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      # ========== 新增：安装pnpm ==========
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'pnpm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
         with:
-          version: 9
+          toolchain: stable
+          override: true
 
-      - name: Install project dependencies
+      - name: Install dependencies
         run: pnpm install
 
-      - name: Build Tauri App
+      - name: Build Tauri app
         run: pnpm tauri build
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: BongoCat-Windows-Bundle
+          name: BongoCat-Windows
           path: src-tauri/target/release/bundle/
