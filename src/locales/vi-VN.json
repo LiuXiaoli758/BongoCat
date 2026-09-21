@@ -129,6 +129,25 @@
           "alwaysOnTop": "Bật/Tắt luôn giữ cửa sổ mèo trên cùng."
         }
       },
+      "stats": {
+        "title": "Thống kê",
+        "labels": {
+          "clickStats": "Thống kê bàn phím và chuột",
+          "keyboard": "Số lần gõ phím",
+          "mouse": "Tổng số lần nhấp chuột",
+          "mouseLeft": "Chuột trái",
+          "mouseRight": "Chuột phải",
+          "mouseMiddle": "Chuột giữa",
+          "reset": "Đặt lại thống kê"
+        },
+        "hints": {
+          "keyboardHint": "Tổng số lần gõ phím trên toàn hệ thống (không bao gồm phím Shift/Ctrl/Alt).",
+          "mouseHint": "Tổng số lần nhấp chuột trên toàn hệ thống.",
+          "resetStats": "Đặt lại",
+          "resetSuccess": "Đã đặt lại thống kê",
+          "resetFailed": "Đặt lại thất bại"
+        }
+      },
       "about": {
         "title": "Giới thiệu",
         "labels": {

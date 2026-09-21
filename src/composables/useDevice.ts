@@ -1,130 +1,193 @@
-import { ref, watch } from 'vue'
-import { listen } from '@tauri-apps/api/event'
+import { invoke } from '@tauri-apps/api/core'
+import { PhysicalPosition } from '@tauri-apps/api/dpi'
+import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
+import { isNil } from 'es-toolkit'
+import { Ticker } from 'pixi.js'
+import { onMounted, onUnmounted, ref } from 'vue'
 
-export const isKeyDown = ref(false)
-export const isMouseDown = ref(false)
-export const mouseButton = ref('')
+import { useAppStore } from '@/stores/app'
+import { useCatStore } from '@/stores/cat'
+import { useModelStore } from '@/stores/model'
+import { inBetween } from '@/utils/is'
+import { isMac, isWindows } from '@/utils/platform'
 
-// ========== 键鼠统计相关变量 ==========
-export const keyPressCount = ref(0)
-export const mouseClickCount = ref(0)
-export const mouseLeftCount = ref(0)
-export const mouseRightCount = ref(0)
-export const mouseMiddleCount = ref(0)
-const pressedKeys = new Set<string>()
+import { INVOKE_KEY, LISTEN_KEY, WINDOW_LABEL } from '../constants'
+import { useModel } from './useModel'
+import { useTauriListen } from './useTauriListen'
 
-// 防抖保存计时器
-let saveTimer: ReturnType<typeof setTimeout> | null = null
-
-// 工具函数，过滤不支持的按键
-function getSupportedKey(key: string): string {
-  const ignoreKeys = ['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight']
-  if (ignoreKeys.includes(key)) return ''
-  return key
+interface MouseButtonEvent {
+  kind: 'MousePress' | 'MouseRelease'
+  value: string
 }
 
+export interface CursorPoint {
+  x: number
+  y: number
+}
+
+interface MouseMoveEvent {
+  kind: 'MouseMove'
+  value: CursorPoint
+}
+
+interface KeyboardEvent {
+  kind: 'KeyboardPress' | 'KeyboardRelease'
+  value: string
+}
+
+type DeviceEvent = MouseButtonEvent | MouseMoveEvent | KeyboardEvent
+
+const DAMPING_DECAY = 0.75
+const appWindow = getCurrentWebviewWindow()
+
 export function useDevice() {
-  const handlePress = (key: string) => {
-    isKeyDown.value = true
+  const modelStore = useModelStore()
+  const releaseTimers = new Map<string, NodeJS.Timeout>()
+  const appStore = useAppStore()
+  const catStore = useCatStore()
+  const latestCursorPoint = ref<CursorPoint>()
+  const smoothedCursorPoint = ref<CursorPoint>()
+  const scaleFactor = ref(1)
+  const { handlePress, handleRelease, handleMouseChange, handleMouseMove } = useModel()
+
+  const tickerCallback = (ticker: Ticker) => {
+    const destination = latestCursorPoint.value
+
+    if (!destination) return
+
+    const current = smoothedCursorPoint.value ?? destination
+
+    const alpha = 1 - DAMPING_DECAY ** (ticker.deltaMS / (1000 / 60))
+
+    const interpolated = {
+      x: current.x + (destination.x - current.x) * alpha,
+      y: current.y + (destination.y - current.y) * alpha,
+    }
+
+    if (Math.hypot(destination.x - interpolated.x, destination.y - interpolated.y) < 0.5) {
+      smoothedCursorPoint.value = { ...destination }
+
+      latestCursorPoint.value = void 0
+    } else {
+      smoothedCursorPoint.value = interpolated
+    }
+
+    void handleCursorMove(smoothedCursorPoint.value)
   }
 
-  const handleRelease = () => {
-    isKeyDown.value = false
+  onMounted(async () => {
+    scaleFactor.value = isMac ? await appWindow.scaleFactor() : 1
+
+    appWindow.onScaleChanged(({ payload }) => {
+      if (!isMac) return
+
+      scaleFactor.value = payload.scaleFactor
+    })
+
+    Ticker.shared.add(tickerCallback)
+  })
+
+  onUnmounted(() => {
+    Ticker.shared.remove(tickerCallback)
+  })
+
+  const startListening = () => {
+    invoke(INVOKE_KEY.START_DEVICE_LISTENING)
   }
 
-  const handleMouseChange = (btn: string, down: boolean) => {
-    isMouseDown.value = down
-    mouseButton.value = btn
+  const getSupportedKey = (key: string) => {
+    let nextKey = key
+
+    const unsupportedKey = !modelStore.supportKeys[nextKey]
+
+    if (key.startsWith('F') && unsupportedKey) {
+      nextKey = key.replace(/F(\d+)/, 'Fn')
+    }
+
+    for (const item of ['Meta', 'Shift', 'Alt', 'Control']) {
+      if (key.startsWith(item) && unsupportedKey) {
+        const regex = new RegExp(`^(${item}).*`)
+        nextKey = key.replace(regex, '$1')
+      }
+    }
+
+    return nextKey
   }
 
-  // 加载本地统计数据
-  const loadCounter = async () => {
-    try {
-      const { readTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
-      const txt = await readTextFile('count.json', { baseDir: BaseDirectory.AppData })
-      const obj = JSON.parse(txt)
-      keyPressCount.value = obj.key ?? 0
-      mouseClickCount.value = obj.mouse ?? 0
-      mouseLeftCount.value = obj.left ?? 0
-      mouseRightCount.value = obj.right ?? 0
-      mouseMiddleCount.value = obj.middle ?? 0
-    } catch (e) {
-      // 文件不存在直接忽略
+  const handleCursorMove = async (cursorPoint: CursorPoint) => {
+    const x = cursorPoint.x * scaleFactor.value
+    const y = cursorPoint.y * scaleFactor.value
+
+    handleMouseMove(new PhysicalPosition(x, y))
+
+    if (catStore.window.hideOnHover) {
+      const { x: winX, y: winY, width, height } = appStore.windowState[WINDOW_LABEL.MAIN] ?? {}
+
+      if (isNil(winX) || isNil(winY) || isNil(width) || isNil(height)) return
+
+      const isInWindow = inBetween(x, winX, winX + width)
+        && inBetween(y, winY, winY + height)
+
+      document.body.style.setProperty('opacity', isInWindow ? '0' : 'unset')
+
+      if (!catStore.window.passThrough) {
+        appWindow.setIgnoreCursorEvents(isInWindow)
+      }
     }
   }
 
-  // 保存统计数据（防抖）
-  const saveCounter = async () => {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(async () => {
-      try {
-        const { writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs')
-        const data = {
-          key: keyPressCount.value,
-          mouse: mouseClickCount.value,
-          left: mouseLeftCount.value,
-          right: mouseRightCount.value,
-          middle: mouseMiddleCount.value
-        }
-        await writeTextFile('count.json', JSON.stringify(data, null, 2), { baseDir: BaseDirectory.AppData })
-      } catch (e) {
-        console.error('保存统计失败', e)
-      }
-    }, 500)
+  const handleAutoRelease = (key: string, delay = 100) => {
+    handlePress(key)
+
+    if (releaseTimers.has(key)) {
+      clearTimeout(releaseTimers.get(key))
+    }
+
+    const timer = setTimeout(() => {
+      handleRelease(key)
+
+      releaseTimers.delete(key)
+    }, delay)
+
+    releaseTimers.set(key, timer)
   }
 
-  // 监听后端DEVICE_CHANGED事件
-  const unlisten = listen('DEVICE_CHANGED', (event) => {
-    const { type, value } = event.payload as { type: string; value: any }
-    switch (type) {
-      case 'KeyboardPress': {
-        const key = getSupportedKey(value)
-        if (key && !pressedKeys.has(key)) {
-          pressedKeys.add(key)
-          keyPressCount.value++
-          saveCounter()
+  useTauriListen<DeviceEvent>(LISTEN_KEY.DEVICE_CHANGED, ({ payload }) => {
+    const { kind, value } = payload
+
+    if (kind === 'KeyboardPress' || kind === 'KeyboardRelease') {
+      const nextValue = getSupportedKey(value)
+
+      if (!nextValue) return
+
+      if (nextValue === 'CapsLock') {
+        return handleAutoRelease(nextValue)
+      }
+
+      if (kind === 'KeyboardPress') {
+        if (isWindows) {
+          const delay = catStore.model.autoReleaseDelay * 1000
+
+          return handleAutoRelease(nextValue, delay)
         }
-        handlePress(key)
-        break
+
+        return handlePress(nextValue)
       }
-      case 'KeyboardRelease': {
-        const key = getSupportedKey(value)
-        if (key) {
-          pressedKeys.delete(key)
-        }
-        handleRelease()
-        break
-      }
-      case 'MouseDown': {
-        const btn = value.button
-        mouseClickCount.value++
-        if (btn === 'Left') mouseLeftCount.value++
-        if (btn === 'Right') mouseRightCount.value++
-        if (btn === 'Middle') mouseMiddleCount.value++
-        saveCounter()
-        handleMouseChange(btn, true)
-        break
-      }
-      case 'MouseUp': {
-        const btn = value.button
-        handleMouseChange(btn, false)
-        break
-      }
+
+      return handleRelease(nextValue)
+    }
+
+    switch (kind) {
+      case 'MousePress':
+        return handleMouseChange(value)
+      case 'MouseRelease':
+        return handleMouseChange(value, false)
+      case 'MouseMove':
+        return latestCursorPoint.value = value
     }
   })
 
-  // 初始化加载计数
-  loadCounter()
-
   return {
-    isKeyDown,
-    isMouseDown,
-    mouseButton,
-    keyPressCount,
-    mouseClickCount,
-    mouseLeftCount,
-    mouseRightCount,
-    mouseMiddleCount,
-    unlisten
+    startListening,
   }
 }

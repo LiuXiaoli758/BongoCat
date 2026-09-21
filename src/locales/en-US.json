@@ -129,6 +129,25 @@
           "alwaysOnTop": "Toggle whether the cat window stays on top."
         }
       },
+      "stats": {
+        "title": "Statistics",
+        "labels": {
+          "clickStats": "Click Statistics",
+          "keyboard": "Keyboard Presses",
+          "mouse": "Total Mouse Clicks",
+          "mouseLeft": "Left Button",
+          "mouseRight": "Right Button",
+          "mouseMiddle": "Middle Button",
+          "reset": "Reset Statistics"
+        },
+        "hints": {
+          "keyboardHint": "Total keyboard presses recorded system-wide (excluding Shift/Ctrl/Alt modifier keys).",
+          "mouseHint": "Total mouse clicks recorded system-wide.",
+          "resetStats": "Reset",
+          "resetSuccess": "Statistics reset",
+          "resetFailed": "Reset failed"
+        }
+      },
       "about": {
         "title": "About",
         "labels": {

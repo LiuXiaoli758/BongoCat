@@ -129,6 +129,25 @@
           "alwaysOnTop": "切換貓咪視窗是否置頂。"
         }
       },
+      "stats": {
+        "title": "統計",
+        "labels": {
+          "clickStats": "鍵鼠點擊統計",
+          "keyboard": "鍵盤敲擊次數",
+          "mouse": "滑鼠總點擊次數",
+          "mouseLeft": "滑鼠左鍵",
+          "mouseRight": "滑鼠右鍵",
+          "mouseMiddle": "滑鼠中鍵",
+          "reset": "重置統計"
+        },
+        "hints": {
+          "keyboardHint": "全系統範圍記錄的鍵盤敲擊次數（不含 Shift/Ctrl/Alt 修飾鍵）。",
+          "mouseHint": "全系統範圍記錄的滑鼠點擊總次數。",
+          "resetStats": "重置",
+          "resetSuccess": "統計已重置",
+          "resetFailed": "重置失敗"
+        }
+      },
       "about": {
         "title": "關於",
         "labels": {

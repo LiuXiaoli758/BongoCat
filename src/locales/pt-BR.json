@@ -129,6 +129,25 @@
           "alwaysOnTop": "Alternar se a janela do gato permanece no topo."
         }
       },
+      "stats": {
+        "title": "Estatísticas",
+        "labels": {
+          "clickStats": "Estatísticas de Cliques",
+          "keyboard": "Teclas Pressionadas",
+          "mouse": "Total de Cliques do Mouse",
+          "mouseLeft": "Botão Esquerdo",
+          "mouseRight": "Botão Direito",
+          "mouseMiddle": "Botão do Meio",
+          "reset": "Redefinir Estatísticas"
+        },
+        "hints": {
+          "keyboardHint": "Total de teclas pressionadas em todo o sistema (excluindo teclas modificadoras Shift/Ctrl/Alt).",
+          "mouseHint": "Total de cliques do mouse em todo o sistema.",
+          "resetStats": "Redefinir",
+          "resetSuccess": "Estatísticas redefinidas",
+          "resetFailed": "Falha ao redefinir"
+        }
+      },
       "about": {
         "title": "Sobre",
         "labels": {

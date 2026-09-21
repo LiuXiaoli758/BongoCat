@@ -129,6 +129,25 @@
           "alwaysOnTop": "切换猫咪窗口是否置顶。"
         }
       },
+      "stats": {
+        "title": "统计",
+        "labels": {
+          "clickStats": "键鼠点击统计",
+          "keyboard": "键盘敲击次数",
+          "mouse": "鼠标总点击次数",
+          "mouseLeft": "鼠标左键",
+          "mouseRight": "鼠标右键",
+          "mouseMiddle": "鼠标中键",
+          "reset": "重置统计"
+        },
+        "hints": {
+          "keyboardHint": "全系统范围记录的键盘敲击次数（不含 Shift/Ctrl/Alt 修饰键）。",
+          "mouseHint": "全系统范围记录的鼠标点击总次数。",
+          "resetStats": "重置",
+          "resetSuccess": "统计已重置",
+          "resetFailed": "重置失败"
+        }
+      },
       "about": {
         "title": "关于",
         "labels": {
