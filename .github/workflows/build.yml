@@ -29,12 +29,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: List project structure (debug)
+        run: |
+          dir
+          dir src-tauri
+
       - name: Build Tauri app (skip signing)
+        working-directory: src-tauri
         run: pnpm tauri build --no-sign
 
-      # Tauri v2 输出路径
+      - name: List build output (debug)
+        working-directory: src-tauri
+        run: |
+          dir target
+          dir target\release
+          dir target\release\bundle
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BongoCat-Windows
-          path: src-tauri/target/release/
+          path: src-tauri/target/release/bundle/
