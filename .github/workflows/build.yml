@@ -6,11 +6,13 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # 关闭tauri签名
+      TAURI_SKIP_SIGNING: true
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # ========== 新增：安装pnpm ==========
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -31,8 +33,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
-      - name: Build Tauri app
-        run: pnpm tauri build
+      - name: Build Tauri app (skip signing)
+        run: pnpm tauri build --no-sign
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
