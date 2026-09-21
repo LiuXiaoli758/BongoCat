@@ -1,216 +1,191 @@
 <script setup lang="ts">
-import type { MotionInfo } from 'easy-live2d'
+import type { TabOption } from '@/components/Tabs'
 
-import { convertFileSrc } from '@tauri-apps/api/core'
-import { PhysicalSize } from '@tauri-apps/api/dpi'
-import { Menu, PredefinedMenuItem } from '@tauri-apps/api/menu'
-import { sep } from '@tauri-apps/api/path'
-import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
-import { exists, readDir } from '@tauri-apps/plugin-fs'
-import { useDebounceFn, useEventListener } from '@vueuse/core'
-import { round } from 'es-toolkit'
-import { nth } from 'es-toolkit/compat'
-import { onMounted, onUnmounted, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ref, watch } from 'vue'
 
-import { useAppMenu } from '@/composables/useAppMenu'
-import { useDevice } from '@/composables/useDevice'
-import { useGamepad } from '@/composables/useGamepad'
-import { useModel } from '@/composables/useModel'
-import { useTauriListen } from '@/composables/useTauriListen'
-import { LISTEN_KEY } from '@/constants'
-import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/plugins/window'
 import { useCatStore } from '@/stores/cat'
 import { useGeneralStore } from '@/stores/general.ts'
 import { useModelStore } from '@/stores/model'
-import { isImage } from '@/utils/is'
-import live2d from '@/utils/live2d'
-import { join } from '@/utils/path'
-import { isWindows } from '@/utils/platform'
-import { clearObject } from '@/utils/shared'
+import { useDevice } from '@/composables/useDevice'
+import { writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs'
 
-const { startListening } = useDevice()
-const appWindow = getCurrentWebviewWindow()
-const { modelSize, handleLoad, handleDestroy, handleResize, handleKeyChange } = useModel()
+// ========== 键鼠统计变量 ==========
+const {
+  keyPressCount,
+  mouseClickCount,
+  mouseLeftCount,
+  mouseRightCount,
+  mouseMiddleCount
+} = useDevice()
+
+// 重置统计
+const resetCount = async () => {
+  keyPressCount.value = 0
+  mouseClickCount.value = 0
+  mouseLeftCount.value = 0
+  mouseRightCount.value = 0
+  mouseMiddleCount.value = 0
+  await writeTextFile('count.json', JSON.stringify({
+    key: 0,
+    mouse: 0,
+    left: 0,
+    right: 0,
+    middle: 0
+  }), { baseDir: BaseDirectory.AppData })
+}
+
+const { t } = useI18n()
 const catStore = useCatStore()
-const { getBaseMenu, getExitMenu } = useAppMenu()
-const modelStore = useModelStore()
 const generalStore = useGeneralStore()
-const resizing = ref(false)
-const backgroundImagePath = ref<string>()
-const { stickActive } = useGamepad()
+const modelStore = useModelStore()
 
-onMounted(startListening)
+const activeTab = ref('cat')
 
-onUnmounted(handleDestroy)
+const tabs: TabOption[] = [
+  {
+    key: 'cat',
+    label: t('pages.preference.tabs.cat'),
+    icon: 'cat',
+  },
+  {
+    key: 'general',
+    label: t('pages.preference.tabs.general'),
+    icon: 'setting',
+  },
+  {
+    key: 'model',
+    label: t('pages.preference.tabs.model'),
+    icon: 'model',
+  },
+  {
+    key: 'shortcut',
+    label: t('pages.preference.tabs.shortcut'),
+    icon: 'keyboard',
+  },
+  {
+    key: 'about',
+    label: t('pages.preference.tabs.about'),
+    icon: 'info',
+  },
+]
 
-const debouncedResize = useDebounceFn(async () => {
-  await handleResize()
-
-  resizing.value = false
-}, 100)
-
-useEventListener('resize', () => {
-  resizing.value = true
-
-  debouncedResize()
-})
-
-watch(() => modelStore.currentModel, async (model) => {
-  if (!model) return
-
-  await handleLoad()
-
-  const path = join(model.path, 'resources', 'background.png')
-
-  const existed = await exists(path)
-
-  backgroundImagePath.value = existed ? convertFileSrc(path) : void 0
-
-  clearObject([modelStore.supportKeys, modelStore.pressedKeys])
-
-  const resourcePath = join(model.path, 'resources')
-  const groups = ['left-keys', 'right-keys']
-
-  for await (const groupName of groups) {
-    const groupDir = join(resourcePath, groupName)
-    const files = await readDir(groupDir).catch(() => [])
-    const imageFiles = files.filter(file => isImage(file.name))
-
-    for (const file of imageFiles) {
-      const fileName = file.name.split('.')[0]
-
-      modelStore.supportKeys[fileName] = join(groupDir, file.name)
-    }
-  }
-
-  modelStore.modelReady = true
-}, { deep: true, immediate: true })
-
-watch([() => catStore.window.scale, modelSize], async ([scale, modelSize]) => {
-  if (!modelSize) return
-
-  const { width, height } = modelSize
-
-  appWindow.setSize(
-    new PhysicalSize({
-      width: Math.round(width * (scale / 100)),
-      height: Math.round(height * (scale / 100)),
-    }),
-  )
+watch(() => catStore.window.opacity, (val) => {
+  generalStore.window.opacity = val
 }, { immediate: true })
-
-watch([modelStore.pressedKeys, stickActive], ([keys, stickActive]) => {
-  const dirs = Object.values(keys).map((path) => {
-    return nth(path.split(sep()), -2)!
-  })
-
-  const hasLeft = dirs.some(dir => dir.startsWith('left'))
-  const hasRight = dirs.some(dir => dir.startsWith('right'))
-
-  handleKeyChange(true, stickActive.left || hasLeft)
-  handleKeyChange(false, stickActive.right || hasRight)
-}, { deep: true })
-
-watch(() => catStore.window.visible, async (value) => {
-  value ? showWindow() : hideWindow()
-})
-
-watch(() => catStore.window.passThrough, (value) => {
-  appWindow.setIgnoreCursorEvents(value)
-}, { immediate: true })
-
-watch(() => catStore.window.alwaysOnTop, setAlwaysOnTop, { immediate: true })
-
-watch(() => generalStore.app.taskbarVisible, setTaskbarVisibility, { immediate: true })
-
-watch(() => catStore.model.motionSound, live2d.setMotionSoundEnabled, { immediate: true })
-
-watch(() => catStore.model.maxFPS, live2d.setMaxFPS, { immediate: true })
-
-useTauriListen<MotionInfo>(LISTEN_KEY.START_MOTION, ({ payload }) => {
-  live2d.startMotion(payload)
-})
-
-useTauriListen<number>(LISTEN_KEY.SET_EXPRESSION, ({ payload }) => {
-  live2d.setExpression(payload)
-})
-
-function handleMouseDown() {
-  appWindow.startDragging()
-}
-
-async function handleContextmenu(event: MouseEvent) {
-  event.preventDefault()
-
-  if (event.shiftKey) return
-
-  const menu = await Menu.new({
-    items: [
-      ...await getBaseMenu(),
-      await PredefinedMenuItem.new({ item: 'Separator' }),
-      ...await getExitMenu(),
-    ],
-  })
-
-  // Temporarily disable always-on-top on Windows so the context menu is not covered
-  if (isWindows && catStore.window.alwaysOnTop) {
-    setAlwaysOnTop(false)
-  }
-
-  await menu.popup()
-
-  // Restore always-on-top after the menu is closed
-  if (!isWindows || !catStore.window.alwaysOnTop) return
-
-  setAlwaysOnTop(true)
-}
-
-function handleMouseMove(event: MouseEvent) {
-  const { buttons, shiftKey, movementX, movementY } = event
-
-  if (buttons !== 2 || !shiftKey) return
-
-  const delta = (movementX + movementY) * 0.5
-  const nextScale = Math.max(10, Math.min(catStore.window.scale + delta, 500))
-
-  catStore.window.scale = round(nextScale)
-}
 </script>
 
 <template>
-  <div
-    class="relative size-screen overflow-hidden children:(absolute size-full)"
-    :class="{ '-scale-x-100': catStore.model.mirror }"
-    :style="{
-      opacity: catStore.window.opacity / 100,
-      borderRadius: `${catStore.window.radius}%`,
-    }"
-    @contextmenu="handleContextmenu"
-    @mousedown="handleMouseDown"
-    @mousemove="handleMouseMove"
-  >
-    <img
-      v-if="backgroundImagePath"
-      class="object-cover"
-      :src="backgroundImagePath"
-    >
+  <div class="h-screen flex overflow-hidden">
+    <div class="w-48 shrink-0 bg-gray-50 p-4">
+      <Tabs v-model="activeTab" :options="tabs" />
+    </div>
 
-    <canvas id="live2dCanvas" />
+    <div class="flex-1 overflow-y-auto p-6">
+      <!-- 猫咪设置 -->
+      <div v-if="activeTab === 'cat'" class="space-y-6">
+        <h2 class="text-xl font-semibold">{{ t('pages.preference.titles.catSetting') }}</h2>
 
-    <img
-      v-for="path in modelStore.pressedKeys"
-      :key="path"
-      class="object-cover"
-      :src="convertFileSrc(path)"
-    >
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.mirror.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.mirror.desc') }}</template>
+          <Switch v-model="catStore.model.mirror" />
+        </SettingItem>
 
-    <div
-      v-show="resizing || !modelStore.modelReady"
-      class="flex items-center justify-center bg-black"
-    >
-      <span class="text-center text-[10vw] text-[#fff]">
-        {{ resizing ? $t('pages.main.hints.redrawing') : $t('pages.main.hints.switching') }}
-      </span>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.mouseMirror.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.mouseMirror.desc') }}</template>
+          <Switch v-model="catStore.model.mouseMirror" />
+        </SettingItem>
+
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.passThrough.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.passThrough.desc') }}</template>
+          <Switch v-model="catStore.window.passThrough" />
+        </SettingItem>
+
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.motionSound.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.motionSound.desc') }}</template>
+          <Switch v-model="catStore.model.motionSound" />
+        </SettingItem>
+
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.motionExp.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.motionExp.desc') }}</template>
+          <Switch v-model="catStore.model.enableMotionExp" />
+        </SettingItem>
+
+        <SettingItem>
+          <template #title>{{ t('pages.preference.cat.keyReleaseDelay.title') }}</template>
+          <template #desc>{{ t('pages.preference.cat.keyReleaseDelay.desc') }}</template>
+          <NumberInput v-model="catStore.model.keyReleaseDelay" :min="0" :max="20" suffix="s" />
+        </SettingItem>
+
+        <!-- ========== 新增：键鼠点击统计板块 ========== -->
+        <div class="mt-6">
+          <div class="text-base font-medium mb-2">键鼠点击统计</div>
+          <div class="rounded-lg border p-4 space-y-2">
+            <p>键盘敲击次数：{{ keyPressCount }}</p>
+            <p>鼠标总点击次数：{{ mouseClickCount }}</p>
+            <p>左键：{{ mouseLeftCount }}｜右键：{{ mouseRightCount }}｜中键：{{ mouseMiddleCount }}</p>
+            <button
+                class="mt-2 px-3 py-1.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+                @click="resetCount"
+            >
+              重置统计
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 通用设置 -->
+      <div v-if="activeTab === 'general'" class="space-y-6">
+        <h2 class="text-xl font-semibold">{{ t('pages.preference.titles.generalSetting') }}</h2>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.general.alwaysOnTop.title') }}</template>
+          <template #desc>{{ t('pages.preference.general.alwaysOnTop.desc') }}</template>
+          <Switch v-model="catStore.window.alwaysOnTop" />
+        </SettingItem>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.general.taskbarVisible.title') }}</template>
+          <template #desc>{{ t('pages.preference.general.taskbarVisible.desc') }}</template>
+          <Switch v-model="generalStore.app.taskbarVisible" />
+        </SettingItem>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.general.opacity.title') }}</template>
+          <template #desc>{{ t('pages.preference.general.opacity.desc') }}</template>
+          <Slider v-model="catStore.window.opacity" :min="25" :max="100" />
+        </SettingItem>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.general.radius.title') }}</template>
+          <template #desc>{{ t('pages.preference.general.radius.desc') }}</template>
+          <Slider v-model="catStore.window.radius" :min="0" :max="50" />
+        </SettingItem>
+        <SettingItem>
+          <template #title>{{ t('pages.preference.general.maxFPS.title') }}</template>
+          <template #desc>{{ t('pages.preference.general.maxFPS.desc') }}</template>
+          <NumberInput v-model="catStore.model.maxFPS" :min="10" :max="144" suffix="FPS" />
+        </SettingItem>
+      </div>
+
+      <!-- 模型管理 -->
+      <div v-if="activeTab === 'model'" class="space-y-6">
+        <h2 class="text-xl font-semibold">{{ t('pages.preference.titles.modelManage') }}</h2>
+        <ModelManager />
+      </div>
+
+      <!-- 快捷键 -->
+      <div v-if="activeTab === 'shortcut'" class="space-y-6">
+        <h2 class="text-xl font-semibold">{{ t('pages.preference.titles.shortcut') }}</h2>
+        <ShortcutSetting />
+      </div>
+
+      <!-- 关于 -->
+      <div v-if="activeTab === 'about'" class="space-y-6">
+        <h2 class="text-xl font-semibold">{{ t('pages.preference.titles.about') }}</h2>
+        <About />
+      </div>
     </div>
   </div>
 </template>
