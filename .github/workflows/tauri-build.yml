@@ -1,34 +1,46 @@
 name: Build BongoCat
-on:
-  # 两种触发方式：推送代码自动打包 + 网页手动点击运行
-  push:
-    branches: [ main ]
-  workflow_dispatch:
 
+on:
+  workflow_dispatch: # 手动触发，不随push自动跑
 jobs:
   build-windows:
     runs-on: windows-latest
-    permissions:
-      contents: write
+    env:
+      TAURI_SKIP_SIGNING: true
     steps:
-      - name: Checkout code
+      - name: Checkout source code
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'pnpm'
+          node-version: 22
+          cache: 'npm'
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install dependencies
-        run: pnpm install
+        run: npm install
 
-      - name: Build Tauri App
-        uses: tauri-apps/tauri-action@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: List project structure (debug)
+        run: |
+          dir
+          dir src-tauri
+
+      - name: Build Tauri app (skip signing)
+        working-directory: src-tauri
+        run: npm run tauri build -- --no-sign
+
+      - name: List build output (debug)
+        working-directory: src-tauri
+        run: |
+          dir target
+          dir target\release
+          dir target\release\bundle
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BongoCat-Windows
+          path: src-tauri/target/release/bundle/
