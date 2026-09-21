@@ -1,8 +1,7 @@
-name: BongoCat Build Only
+name: Build BongoCat
 
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: windows-latest
@@ -35,18 +34,24 @@ jobs:
           dir src-tauri
 
       - name: Build Tauri app (skip signing)
-        working-directory: src-tauri
         run: pnpm tauri build --no-sign
 
       - name: List build output (debug)
-        working-directory: src-tauri
         run: |
-          dir target
-          dir target\release
-          dir target\release\bundle
+          if(Test-Path target){
+            dir target
+            if(Test-Path target\release){
+              dir target\release
+              if(Test-Path target\release\bundle){
+                dir target\release\bundle
+              }
+            }
+          } else {
+            Write-Host "target文件夹不存在"
+          }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: BongoCat-Windows
-          path: src-tauri/target/release/bundle/
+          path: target/release/bundle/
