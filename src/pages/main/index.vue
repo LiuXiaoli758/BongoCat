@@ -22,7 +22,6 @@ import { hideWindow, setAlwaysOnTop, setTaskbarVisibility, showWindow } from '@/
 import { useCatStore } from '@/stores/cat'
 import { useGeneralStore } from '@/stores/general.ts'
 import { useModelStore } from '@/stores/model'
-import { useStatsStore } from '@/stores/stats'
 import { isImage } from '@/utils/is'
 import live2d from '@/utils/live2d'
 import { join } from '@/utils/path'
@@ -36,20 +35,13 @@ const catStore = useCatStore()
 const { getBaseMenu, getExitMenu } = useAppMenu()
 const modelStore = useModelStore()
 const generalStore = useGeneralStore()
-const statsStore = useStatsStore()
 const resizing = ref(false)
 const backgroundImagePath = ref<string>()
 const { stickActive } = useGamepad()
 
-onMounted(() => {
-  startListening()
-  statsStore.startListen()
-})
+onMounted(startListening)
 
-onUnmounted(() => {
-  handleDestroy()
-  statsStore.stopListen()
-})
+onUnmounted(handleDestroy)
 
 const debouncedResize = useDebounceFn(async () => {
   await handleResize()

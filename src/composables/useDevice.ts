@@ -8,6 +8,7 @@ import { onMounted, onUnmounted, ref } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useCatStore } from '@/stores/cat'
 import { useModelStore } from '@/stores/model'
+import { useStatsStore } from '@/stores/stats'
 import { inBetween } from '@/utils/is'
 import { isMac, isWindows } from '@/utils/platform'
 
@@ -45,6 +46,7 @@ export function useDevice() {
   const releaseTimers = new Map<string, NodeJS.Timeout>()
   const appStore = useAppStore()
   const catStore = useCatStore()
+  const statsStore = useStatsStore()
   const latestCursorPoint = ref<CursorPoint>()
   const smoothedCursorPoint = ref<CursorPoint>()
   const scaleFactor = ref(1)
@@ -154,6 +156,14 @@ export function useDevice() {
 
   useTauriListen<DeviceEvent>(LISTEN_KEY.DEVICE_CHANGED, ({ payload }) => {
     const { kind, value } = payload
+
+    // ===== 键鼠统计（复用 Rust 全局事件流，全系统范围） =====
+    if (kind === 'KeyboardPress') {
+      statsStore.recordKeyPress(value)
+    }
+    else if (kind === 'MousePress') {
+      statsStore.recordMousePress(value)
+    }
 
     if (kind === 'KeyboardPress' || kind === 'KeyboardRelease') {
       const nextValue = getSupportedKey(value)

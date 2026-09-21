@@ -2,9 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 /**
- * 键鼠点击统计（前端方案）
+ * 键鼠点击统计
  *
- * 监听挂载在小猫主窗口（main/index.vue），窗口运行期间持续统计；
+ * 数据来源：复用 Rust 后端 rdev 全局键盘鼠标钩子推送的 device-changed 事件，
+ * 由 useDevice.ts 的回调调用 recordKeyPress / recordMousePress 写入；
+ * 全系统范围统计，无需修改任何 Rust 代码。
  * 数据由 @tauri-store/pinia（saveOnChange）自动持久化，重启应用后保留。
  */
 export const useStatsStore = defineStore('stats', () => {
@@ -14,39 +16,25 @@ export const useStatsStore = defineStore('stats', () => {
   const mouseRight = ref(0)
   const mouseMiddle = ref(0)
 
-  // 修饰键不计入统计
-  function getSupportedKey(key: string): string {
-    const ignoreKeys = ['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight']
-    if (ignoreKeys.includes(key)) return ''
-    return key
+  // 修饰键不计入统计（rdev 按键名：ShiftLeft/ShiftRight/ControlLeft/ControlRight/Alt/AltGr/MetaLeft/MetaRight）
+  const MODIFIER_PREFIXES = ['Shift', 'Control', 'Alt', 'Meta']
+
+  function isModifierKey(key: string): boolean {
+    return MODIFIER_PREFIXES.some(prefix => key.startsWith(prefix))
   }
 
-  // 键盘按下：e.repeat 过滤长按重复计数
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.repeat) return
-    const validKey = getSupportedKey(e.code)
-    if (!validKey) return
+  // 键盘按下（来自 Rust 全局事件，key 如 "KeyL"、"Space"、"Return"）
+  function recordKeyPress(key: string) {
+    if (isModifierKey(key)) return
     keyboardCount.value += 1
   }
 
-  // 鼠标点击
-  const handleMouseDown = (e: MouseEvent) => {
+  // 鼠标按下（来自 Rust 全局事件，btn 为 "Left"/"Right"/"Middle"）
+  function recordMousePress(btn: string) {
     mouseTotal.value += 1
-    if (e.button === 0) mouseLeft.value += 1
-    if (e.button === 2) mouseRight.value += 1
-    if (e.button === 1) mouseMiddle.value += 1
-  }
-
-  // 开启监听（小猫主窗口挂载时调用）
-  function startListen() {
-    window.addEventListener('keydown', handleKeyDown)
-    window.addEventListener('mousedown', handleMouseDown)
-  }
-
-  // 关闭监听（小猫主窗口卸载时调用）
-  function stopListen() {
-    window.removeEventListener('keydown', handleKeyDown)
-    window.removeEventListener('mousedown', handleMouseDown)
+    if (btn === 'Left') mouseLeft.value += 1
+    if (btn === 'Right') mouseRight.value += 1
+    if (btn === 'Middle') mouseMiddle.value += 1
   }
 
   // 重置统计
@@ -64,8 +52,8 @@ export const useStatsStore = defineStore('stats', () => {
     mouseLeft,
     mouseRight,
     mouseMiddle,
-    startListen,
-    stopListen,
+    recordKeyPress,
+    recordMousePress,
     resetStats,
   }
 })
